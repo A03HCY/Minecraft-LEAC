@@ -5,4 +5,4 @@ import requests, json
 
 @home_blue.route('/', methods=['GET'])
 def Home():
-    return render_template('Arlis.html')
+    return 'Hi'

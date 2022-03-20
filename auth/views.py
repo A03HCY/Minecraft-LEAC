@@ -4,7 +4,7 @@ import requests, json
 import User as DB
 
 
-User = DB.UserDB('./auth/User.xlsx')
+User = DB.UserDB('./auth/UserData.xlsx')
 
 
 @auth_blue.route('/login', methods=['GET', 'POST'])
@@ -15,13 +15,16 @@ def Login():
     if request.method == 'GET':
         return render_template('login.html')
     
-    email = request.form.get('email')
-    pwd = request.form.get('password')
+    email = request.values.get('email')
+    pwd = request.values.get('password')
+    rem = request.values.get('remember')
     
     info = User.SearchBy(email, 'email')
     if info.get('password') == DB.MD5(pwd):
         session['uid'] = info.get('uid')
         session['all'] = info
+        if rem == 'remember':session.permanent = True
+        else:session.permanent = False
         return 'True'
     else:
         return 'False'
@@ -33,28 +36,29 @@ def Logout():
         session.pop('uid')
         session.pop('all')
     except:pass
-    return redirect('/auth/login',code=302,Response=None)
+    return 'True'
 
 
 @auth_blue.route('/info', methods=['GET'])
 def Info():
-    uid = session.get('uid')
-    if not uid:return json.dumps({})
-    info = session.get('all')
-    info.pop('password')
-    info.pop('row')
-    return json.dumps(info)
+    uid = request.values.get('uid')
+    if uid == None:uid = session.get('uid')
+    if uid == None:return jsonify({})
+    info = User.SearchBy(int(uid), 'uid')
+    try:
+        info.pop('password')
+        info.pop('row')
+    except:pass
+    return jsonify(info)
 
 
-@auth_blue.route('/head', methods=['GET'])
+@auth_blue.route('/head', methods=['GET', 'POST'])
 def Head():
     uid = request.values.get("uid")
-    if not uid:
-        head = session.get('all').get('head')
-    else:
-        head = User.SearchBy(uid, 'uid').get('head')
+    if uid == None:
+        uid = session.get('all', {}).get('uid')
     
-    tar = "http://q1.qlogo.cn/g?b=qq&nk={}&s=640".format(str(head))
+    tar = "https://crafatar.com/avatars/{}?size=100&overlay".format(uid)
     try:req = requests.get(tar)
     except:return ''
     return req.content

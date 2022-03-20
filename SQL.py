@@ -72,10 +72,17 @@ class DB:
                 if rtype == 16:
                     if data[i] == 1: val.append('1')
                     else: val.append('0')
-                else: val.append( "'{}'".format(str(data[i])) )
+                else:
+                    if data[i] == None:
+                        val.append("NULL")
+                    else:
+                        val.append( "'{}'".format(str(data[i])) )
 
             else:
-                val.append( "'{}'".format(str(data[i])) )
+                if data[i] == None:
+                    val.append("NULL")
+                else:
+                    val.append( "'{}'".format(str(data[i])) )
 
         key = "({})".format(', '.join(key))
         val = "({})".format(', '.join(val))
@@ -125,7 +132,6 @@ class DB:
     
     def execute(self, cmd:str):
         cursor = self.db.cursor()
-
         try:
             cursor.execute(cmd)
             self.db.commit()
@@ -160,7 +166,7 @@ class DB:
         head = self.head(table)
         return head
 
-    def GetData(self, table:str, where:dict={}, limit:int=0, ntype=list) -> list:
+    def GetData(self, table:str, where:dict={}, limit:int=0, ntype=list, nopin=False) -> list:
         if not table in self.tables:return
         Base = 'SELECT * FROM {}'.format(table)
         head = self.GetHead(table)[1]
@@ -178,18 +184,31 @@ class DB:
         data = self.fetchall(Base)
         ndata = []
         for i in data:
-            if ntype == dict: ndata.append( dict(zip(head,list(i))) )
-            elif ntype == list: ndata.append( list(i) )
+            temp = []
+            i = list(i)
+
+            if nopin:
+                for s in i:
+                    if type(s) in [str, int, list, dict]:
+                        temp.append(s)
+                    else:
+                        temp.append(str(s))
+                i = temp
+
+            if ntype == dict: ndata.append( dict(zip(head,i)) )
+            elif ntype == list: ndata.append(i)
             
         return ndata
 
-    def NewData(self, table:str, data:dict, fore_noid:bool=False):
+    def NewData(self, table:str, data:dict, fore_noid:bool=False, fore_load=True):
         if not table in self.tables:return
         Base = 'INSERT INTO {}'.format(table)
         head = self.GetHead(table)[1]
 
-        Data = self.Loadin(head, data, ntype=dict)[0]
+        if fore_load: Data = self.Loadin(head, data, ntype=dict)[0]
+        else: Data = data
         Data = self.ComparePass(table, Data)
+        print(Data)
         if Data == {}: return False
 
         if not fore_noid:
@@ -198,6 +217,8 @@ class DB:
         
         key, val = self.ToINS(table, Data)
         Base += " {key} VALUES {val}".format(key=key, val=val)
+
+        print(Base)
 
         res = self.execute(Base)
         return res
@@ -220,6 +241,3 @@ class DB:
     
     def close(self):
         self.db.close()
-
-class LTDB(DB):
-    pass
