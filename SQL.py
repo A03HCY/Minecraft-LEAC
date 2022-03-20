@@ -11,6 +11,7 @@ class DB:
         self.database = database
         self.db = pymysql.connect(host=host, user=user, password=password, database=database, port=port)
 
+        self.version = self.version()
         self.tables = self.LoadTables()
     
     def LoadTables(self):
@@ -45,6 +46,42 @@ class DB:
             rneed = req[6]
             if rneed: need.append(rname)
         return need
+    
+    def GetHeadList(self, table:str):
+        if not table in self.tables: return []
+        head = self.GetHead(table)
+
+        ndata = {}
+        for req in head[0]:
+            rname = req[0]
+            rvalu = req[1:]
+            ndata[rname] = rvalu
+        return ndata
+    
+    def ToINS(self, table:str, data:dict):
+        if not table in self.tables: return {}
+        hels = self.GetHeadList(table)
+        key = []
+        val = []
+
+        for i in data:
+            key.append(i)
+            if i in hels:
+
+                rtype = hels[i][0]
+                if rtype == 16:
+                    if data[i] == 1: val.append('1')
+                    else: val.append('0')
+                else: val.append( "'{}'".format(str(data[i])) )
+
+            else:
+                val.append( "'{}'".format(str(data[i])) )
+
+        key = "({})".format(', '.join(key))
+        val = "({})".format(', '.join(val))
+
+        return key, val
+
         
     def ComparePass(self, table:str, data:dict, define=''):
         if not table in self.tables: return {}
@@ -63,9 +100,13 @@ class DB:
                 continue
 
             value = data[rname]
-            if len(value) > rlong: return {}
+            try:
+                if len(value) > rlong: return {}
+            except:
+                try:
+                    if len(str(value)) > rlong: return {}
+                except:pass
             ndata[rname] = value
-        
         return ndata
     
     def fetchone(self, cmd:str):
@@ -81,6 +122,20 @@ class DB:
         data = cursor.fetchall()
         cursor.close()
         return data
+    
+    def execute(self, cmd:str):
+        cursor = self.db.cursor()
+
+        try:
+            cursor.execute(cmd)
+            self.db.commit()
+            res = True
+        except:
+            self.db.rollback()
+            res = False
+        finally:
+            cursor.close()
+            return res
     
     def version(self):
         try:data = self.fetchone("SELECT VERSION();")[0]
@@ -127,15 +182,44 @@ class DB:
             elif ntype == list: ndata.append( list(i) )
             
         return ndata
+
+    def NewData(self, table:str, data:dict, fore_noid:bool=False):
+        if not table in self.tables:return
+        Base = 'INSERT INTO {}'.format(table)
+        head = self.GetHead(table)[1]
+
+        Data = self.Loadin(head, data, ntype=dict)[0]
+        Data = self.ComparePass(table, Data)
+        if Data == {}: return False
+
+        if not fore_noid:
+            try:Data.pop('id')
+            except:pass
+        
+        key, val = self.ToINS(table, Data)
+        Base += " {key} VALUES {val}".format(key=key, val=val)
+
+        res = self.execute(Base)
+        return res
+
+    def Delete(self, table:str, where:dict):
+        if not table in self.tables:return
+        Base = 'DELETE FROM {}'.format(table)
+        head = self.GetHeadList(table)
+
+        stands = []
+        for key in where:
+            if not key in head:continue
+            if "'" in where[key]:continue
+            stands.append("{key}='{val}'".format(key=key, val=where[key]))
+        stands = ' AND '.join(stands)
+        if stands: Base += ' WHERE ' + stands
+
+        res = self.execute(Base)
+        return res
     
     def close(self):
         self.db.close()
 
-
-
 class LTDB(DB):
-    def NewData(self, table:str, data:dict):
-        if not table in self.tables:return
-        Base = 'INSERT INTO {}'.format(table)
-        head = self.GetHead(table)[1]
-        Data = self.Loadin(head, data, ntype=dict)[0]
+    pass
